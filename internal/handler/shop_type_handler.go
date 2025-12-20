@@ -17,6 +17,7 @@ func NewShopTypeHandler(svc *service.ShopTypeService) *ShopTypeHandler {
 	return &ShopTypeHandler{service: svc}
 }
 
+// QueryTypeList 查询商铺类型列表
 func (h *ShopTypeHandler) QueryTypeList(ctx *gin.Context) {
 	types, err := h.service.List(ctx.Request.Context())
 	if err != nil {

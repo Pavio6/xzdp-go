@@ -19,7 +19,7 @@ func NewMySQL(cfg config.MySQLConfig, log *zap.Logger) (*gorm.DB, error) {
 			gormlogger.Config{
 				SlowThreshold:             time.Second,
 				IgnoreRecordNotFoundError: true,
-				LogLevel:                  gormlogger.Warn,
+				LogLevel:                  gormlogger.Info,
 			},
 		),
 	}

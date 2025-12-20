@@ -19,14 +19,14 @@ type ShopHandler struct {
 func NewShopHandler(svc *service.ShopService) *ShopHandler {
 	return &ShopHandler{service: svc}
 }
-
+// QueryShopByID 根据ID查询店铺
 func (h *ShopHandler) QueryShopByID(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, result.Fail("invalid id"))
+		ctx.JSON(http.StatusBadRequest, result.Fail(err.Error()))
 		return
 	}
-	shop, err := h.service.GetByID(ctx.Request.Context(), id)
+	shop, err := h.service.GetByIDWithLogicalExpire(ctx.Request.Context(), id)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
 		return
@@ -46,7 +46,7 @@ func (h *ShopHandler) SaveShop(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, result.OkWithData(shop.ID))
 }
-
+// UpdateShop 更新店铺信息
 func (h *ShopHandler) UpdateShop(ctx *gin.Context) {
 	var shop model.Shop
 	if err := ctx.ShouldBindJSON(&shop); err != nil {
