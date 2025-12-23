@@ -23,7 +23,7 @@ func NewRegistry(db *gorm.DB, rdb *redis.Client) *Registry {
 		Blog:           NewBlogService(db),
 		Shop:           NewShopService(db, rdb),
 		ShopType:       NewShopTypeService(db, rdb),
-		Voucher:        NewVoucherService(db, seckillSvc),
+		Voucher:        NewVoucherService(db, seckillSvc, rdb),
 		SeckillVoucher: seckillSvc,
 		User:           NewUserService(db, rdb),
 		VoucherOrder:   NewVoucherOrderService(db, rdb),

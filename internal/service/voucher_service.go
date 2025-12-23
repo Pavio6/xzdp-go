@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"hmdp-backend/internal/model"
@@ -12,6 +14,7 @@ import (
 // VoucherService 处理普通券与秒杀券逻辑
 type VoucherService struct {
 	db         *gorm.DB
+	rdb        *redis.Client
 	seckillSvc *SeckillVoucherService
 }
 
@@ -34,12 +37,13 @@ type VoucherWithSeckill struct {
 }
 
 // NewVoucherService 创建 VoucherService 实例
-func NewVoucherService(db *gorm.DB, seckillSvc *SeckillVoucherService) *VoucherService {
-	return &VoucherService{db: db, seckillSvc: seckillSvc}
+func NewVoucherService(db *gorm.DB, seckillSvc *SeckillVoucherService, rdb *redis.Client) *VoucherService {
+	return &VoucherService{db: db, seckillSvc: seckillSvc, rdb: rdb}
 }
 
 func (s *VoucherService) Create(ctx context.Context, voucher *model.Voucher) error {
 	return s.db.WithContext(ctx).Create(voucher).Error
+
 }
 
 func (s *VoucherService) QueryVoucherOfShop(ctx context.Context, shopID int64) ([]VoucherWithSeckill, error) {
@@ -59,7 +63,7 @@ func (s *VoucherService) AddSeckillVoucher(ctx context.Context, voucher *model.V
 	if err := s.Create(ctx, voucher); err != nil {
 		return err
 	}
-	stock := 0
+	stock := 100
 	if voucher.Stock != nil {
 		stock = *voucher.Stock
 	}
@@ -77,5 +81,10 @@ func (s *VoucherService) AddSeckillVoucher(ctx context.Context, voucher *model.V
 		BeginTime: begin,
 		EndTime:   end,
 	}
-	return s.seckillSvc.Create(ctx, sec)
+	if err := s.seckillSvc.Create(ctx, sec); err != nil {
+		return err
+	}
+	// 将库存写入 Redis，供秒杀脚本扣减
+	stockKey := fmt.Sprintf("seckill:stock:vid:%d", voucher.ID)
+	return s.rdb.Set(ctx, stockKey, stock, 0).Err()
 }

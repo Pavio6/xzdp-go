@@ -166,3 +166,43 @@ func TestSeckillOneOrderPerUser(t *testing.T) {
 
 	t.Logf("single user attempts=%d, success=%d for voucher %d", attempts, success, voucherID)
 }
+
+// TestSeckillSingleUserRedisFlow 单用户触发一次秒杀流程（依赖 Redis 中已有 stock）
+func TestSeckillSingleUserRedisFlow(t *testing.T) {
+	ctx := context.Background()
+
+	dsn := os.Getenv("TEST_DSN")
+	if dsn == "" {
+		dsn = "root:root@tcp(127.0.0.1:3306)/hmdp?parseTime=true&loc=Local&charset=utf8mb4"
+	}
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Skipf("skip: cannot connect mysql: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err == nil {
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(5)
+		defer sqlDB.Close()
+	}
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "127.0.0.1:6379",
+		DB:   0,
+	})
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		t.Skipf("skip: cannot connect redis: %v", err)
+	}
+	defer rdb.Close()
+
+	svc := NewVoucherOrderService(db, rdb)
+
+	const voucherID = int64(12)
+	const userID = int64(3)
+
+	orderID, err := svc.Seckill(ctx, voucherID, userID)
+	if err != nil {
+		t.Fatalf("seckill failed: %v", err)
+	}
+	t.Logf("seckill accepted, orderID=%d", orderID)
+}
