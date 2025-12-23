@@ -13,6 +13,7 @@ type Registry struct {
 	Voucher        *VoucherService
 	SeckillVoucher *SeckillVoucherService
 	User           *UserService
+	VoucherOrder   *VoucherOrderService
 }
 
 // NewRegistry 使用共享 DB 与 Redis 构建所有服务
@@ -25,5 +26,6 @@ func NewRegistry(db *gorm.DB, rdb *redis.Client) *Registry {
 		Voucher:        NewVoucherService(db, seckillSvc),
 		SeckillVoucher: seckillSvc,
 		User:           NewUserService(db, rdb),
+		VoucherOrder:   NewVoucherOrderService(db, rdb),
 	}
 }

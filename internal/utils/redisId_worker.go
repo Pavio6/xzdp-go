@@ -43,7 +43,7 @@ func (w *RedisIdWorker) NextId(ctx context.Context, keyPrefix string) (int64, er
 
 	// 2. 生成序列号
 	// 获取当前日期，用于 Redis Key
-	date := now.Format("20060102")
+	date := now.Format("2006:01:02")
 	key := fmt.Sprintf("icr:%s:%s", keyPrefix, date)
 
 	// 利用 Redis 的 INCR 自增

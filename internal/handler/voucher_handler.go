@@ -32,6 +32,7 @@ func (h *VoucherHandler) AddVoucher(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result.OkWithData(voucher.ID))
 }
 
+// AddSeckillVoucher 添加秒杀优惠券
 func (h *VoucherHandler) AddSeckillVoucher(ctx *gin.Context) {
 	var voucher model.Voucher
 	if err := ctx.ShouldBindJSON(&voucher); err != nil {
@@ -45,6 +46,7 @@ func (h *VoucherHandler) AddSeckillVoucher(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result.OkWithData(voucher.ID))
 }
 
+// 获取指定店铺的优惠券列表
 func (h *VoucherHandler) QueryVoucherOfShop(ctx *gin.Context) {
 	shopID, err := strconv.ParseInt(ctx.Param("shopId"), 10, 64)
 	if err != nil {

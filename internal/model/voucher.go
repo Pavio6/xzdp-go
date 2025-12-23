@@ -13,8 +13,8 @@ type Voucher struct {
 	ActualValue int64      `gorm:"column:actual_value" json:"actualValue"`
 	Type        int        `gorm:"column:type" json:"type"`
 	Status      int        `gorm:"column:status" json:"status"`
-	CreateTime  time.Time  `gorm:"column:create_time" json:"createTime"`
-	UpdateTime  time.Time  `gorm:"column:update_time" json:"updateTime"`
+	CreateTime  time.Time  `gorm:"column:create_time;autoCreateTime" json:"createTime"`
+	UpdateTime  time.Time  `gorm:"column:update_time;autoUpdateTime" json:"updateTime"`
 	Stock       *int       `gorm:"-" json:"stock,omitempty"`
 	BeginTime   *time.Time `gorm:"-" json:"beginTime,omitempty"`
 	EndTime     *time.Time `gorm:"-" json:"endTime,omitempty"`

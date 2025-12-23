@@ -11,6 +11,7 @@ import (
 
 // RegisterRoutes 统一注册所有模块的路由
 func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir string, rdb *redis.Client) {
+	engine.Use(middleware.CORSMiddleware())
 	engine.Use(middleware.LoginMiddleware(rdb))
 
 	shopHandler := handler.NewShopHandler(services.Shop)
@@ -19,7 +20,7 @@ func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir st
 	blogHandler := handler.NewBlogHandler(services.Blog, services.User)
 	uploadHandler := handler.NewUploadHandler(uploadDir)
 	userHandler := handler.NewUserHandler(services.User)
-	voucherOrderHandler := handler.NewVoucherOrderHandler()
+	voucherOrderHandler := handler.NewVoucherOrderHandler(services.VoucherOrder)
 
 	shopGroup := engine.Group("/shop")
 	shopGroup.GET("/:id", shopHandler.QueryShopByID)

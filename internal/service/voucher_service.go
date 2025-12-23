@@ -15,6 +15,24 @@ type VoucherService struct {
 	seckillSvc *SeckillVoucherService
 }
 
+// VoucherWithSeckill 用于返回携带秒杀信息的券
+type VoucherWithSeckill struct {
+	ID          int64      `gorm:"column:id" json:"id"`
+	ShopID      int64      `gorm:"column:shop_id" json:"shopId"`
+	Title       string     `gorm:"column:title" json:"title"`
+	SubTitle    string     `gorm:"column:sub_title" json:"subTitle"`
+	Rules       string     `gorm:"column:rules" json:"rules"`
+	PayValue    int64      `gorm:"column:pay_value" json:"payValue"`
+	ActualValue int64      `gorm:"column:actual_value" json:"actualValue"`
+	Type        int        `gorm:"column:type" json:"type"`
+	Status      int        `gorm:"column:status" json:"status"`
+	CreateTime  time.Time  `gorm:"column:create_time" json:"createTime"`
+	UpdateTime  time.Time  `gorm:"column:update_time" json:"updateTime"`
+	Stock       *int       `gorm:"column:stock" json:"stock,omitempty"`
+	BeginTime   *time.Time `gorm:"column:begin_time" json:"beginTime,omitempty"`
+	EndTime     *time.Time `gorm:"column:end_time" json:"endTime,omitempty"`
+}
+
 // NewVoucherService 创建 VoucherService 实例
 func NewVoucherService(db *gorm.DB, seckillSvc *SeckillVoucherService) *VoucherService {
 	return &VoucherService{db: db, seckillSvc: seckillSvc}
@@ -24,8 +42,8 @@ func (s *VoucherService) Create(ctx context.Context, voucher *model.Voucher) err
 	return s.db.WithContext(ctx).Create(voucher).Error
 }
 
-func (s *VoucherService) QueryVoucherOfShop(ctx context.Context, shopID int64) ([]model.Voucher, error) {
-	var vouchers []model.Voucher
+func (s *VoucherService) QueryVoucherOfShop(ctx context.Context, shopID int64) ([]VoucherWithSeckill, error) {
+	var vouchers []VoucherWithSeckill
 	query := `
         SELECT v.id, v.shop_id, v.title, v.sub_title, v.rules, v.pay_value,
                v.actual_value, v.type, v.status, v.create_time, v.update_time,
