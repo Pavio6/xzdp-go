@@ -198,7 +198,7 @@ func TestSeckillSingleUserRedisFlow(t *testing.T) {
 	svc := NewVoucherOrderService(db, rdb)
 
 	const voucherID = int64(12)
-	const userID = int64(3)
+	const userID = int64(2)
 
 	orderID, err := svc.Seckill(ctx, voucherID, userID)
 	if err != nil {

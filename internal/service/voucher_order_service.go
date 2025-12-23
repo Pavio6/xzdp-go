@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,9 @@ const (
 	orderQueue  = "order:queue"
 )
 
+//go:embed seckill.lua
+var seckillLuaSource string
+
 // VoucherOrderService 处理秒杀下单逻辑
 type VoucherOrderService struct {
 	db         *gorm.DB
@@ -33,31 +37,11 @@ type VoucherOrderService struct {
 
 func NewVoucherOrderService(db *gorm.DB, rdb *redis.Client) *VoucherOrderService {
 	svc := &VoucherOrderService{
-		db:       db,
-		rdb:      rdb,
-		idWorker: utils.NewRedisIdWorker(rdb),
-		queueKey: orderQueue,
-		seckillLua: redis.NewScript(`
-local stockKey = KEYS[1]
-local orderSetKey = KEYS[2]
-local queueKey = KEYS[3]
-local userId = ARGV[1]
-local voucherId = ARGV[2]
-local orderId = ARGV[3]
-
-local stock = tonumber(redis.call("get", stockKey))
-if not stock or stock <= 0 then
-  return 1
-end
-if redis.call("sismember", orderSetKey, userId) == 1 then
-  return 2
-end
-
-redis.call("decr", stockKey)
-redis.call("sadd", orderSetKey, userId)
-redis.call("rpush", queueKey, cjson.encode({userId=userId, voucherId=voucherId, orderId=orderId}))
-return 0
-		`),
+		db:         db,
+		rdb:        rdb,
+		idWorker:   utils.NewRedisIdWorker(rdb),
+		queueKey:   orderQueue,
+		seckillLua: redis.NewScript(seckillLuaSource),
 	}
 	go svc.consumeOrders(context.Background())
 	return svc
@@ -99,23 +83,31 @@ func (s *VoucherOrderService) Seckill(ctx context.Context, voucherID, userID int
 		return 0, errors.New("库存不足")
 	}
 
-	// 生成订单ID，写入 Lua 脚本，由脚本原子扣减库存并入队
-	orderID, err := s.idWorker.NextId(ctx, "order")
-	if err != nil {
-		return 0, err
-	}
-
 	stockKey := fmt.Sprintf(stockKeyFmt, voucherID)
 	orderSetKey := fmt.Sprintf(orderSetFmt, voucherID)
 
-	res, err := s.seckillLua.Run(ctx, s.rdb, []string{stockKey, orderSetKey, s.queueKey},
-		userID, voucherID, orderID).Int()
+	res, err := s.seckillLua.Run(ctx, s.rdb, []string{stockKey, orderSetKey},
+		userID, voucherID).Int()
 	if err != nil {
 		return 0, err
 	}
+
 	switch res {
 	case 0:
-		// 入队成功，异步创建订单
+		// 生成订单ID
+		orderID, err := s.idWorker.NextId(ctx, "order")
+		if err != nil {
+			return 0, err
+		}
+		// Lua 校验成功，入队异步创建订单
+		payload, _ := json.Marshal(map[string]interface{}{
+			"userId":    userID,
+			"voucherId": voucherID,
+			"orderId":   orderID,
+		})
+		if err := s.rdb.RPush(ctx, s.queueKey, payload).Err(); err != nil {
+			return 0, err
+		}
 		return orderID, nil
 	case 1:
 		return 0, errors.New("库存不足")
@@ -138,30 +130,53 @@ func (s *VoucherOrderService) consumeOrders(ctx context.Context) {
 			continue
 		}
 		// 解析订单消息（兼容字符串/数字）
-		var raw map[string]string
+		var raw map[string]interface{}
 		if err := json.Unmarshal([]byte(res[1]), &raw); err != nil {
 			log.Printf("consumeOrders unmarshal error: %v payload=%s", err, res[1])
 			continue
 		}
-		uid, err1 := strconv.ParseInt(raw["userId"], 10, 64)
-		vid, err2 := strconv.ParseInt(raw["voucherId"], 10, 64)
-		oid, err3 := strconv.ParseInt(raw["orderId"], 10, 64)
+		parse := func(v interface{}) (int64, error) {
+			switch val := v.(type) {
+			case string:
+				return strconv.ParseInt(val, 10, 64)
+			case float64:
+				return int64(val), nil
+			case json.Number:
+				return val.Int64()
+			default:
+				return 0, fmt.Errorf("unexpected type %T", v)
+			}
+		}
+		uid, err1 := parse(raw["userId"])
+		vid, err2 := parse(raw["voucherId"])
+		oid, err3 := parse(raw["orderId"])
 		if err1 != nil || err2 != nil || err3 != nil {
 			log.Printf("consumeOrders parse ids error: uidErr=%v vidErr=%v oidErr=%v payload=%s", err1, err2, err3, res[1])
 			continue
 		}
 
-		// 创建订单记录
 		nowTime := time.Now()
-		order := &model.VoucherOrder{
-			ID:         oid,
-			UserID:     uid,
-			VoucherID:  vid,
-			CreateTime: nowTime,
-			UpdateTime: nowTime,
-		}
-		if err := s.db.WithContext(ctx).Create(order).Error; err != nil {
-			log.Printf("consumeOrders create order error: %v ", err)
+		// 事务内扣减 DB 库存并创建订单，确保数据库内一致性
+		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			res := tx.Model(&model.SeckillVoucher{}).
+				Where("voucher_id = ? AND stock > 0", vid).
+				Update("stock", gorm.Expr("stock - 1"))
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return errors.New("db stock not enough")
+			}
+			order := &model.VoucherOrder{
+				ID:         oid,
+				UserID:     uid,
+				VoucherID:  vid,
+				CreateTime: nowTime,
+				UpdateTime: nowTime,
+			}
+			return tx.Create(order).Error
+		}); err != nil {
+			log.Printf("consumeOrders txn error: %v payload=%s", err, res[1])
 		}
 	}
 }
