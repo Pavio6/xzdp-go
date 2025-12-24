@@ -21,6 +21,7 @@ func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir st
 	uploadHandler := handler.NewUploadHandler(uploadDir)
 	userHandler := handler.NewUserHandler(services.User)
 	voucherOrderHandler := handler.NewVoucherOrderHandler(services.VoucherOrder)
+	followHandler := handler.NewFollowHandler(services.Follow, services.User)
 
 	shopGroup := engine.Group("/shop")
 	shopGroup.GET("/:id", shopHandler.QueryShopByID)
@@ -42,6 +43,7 @@ func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir st
 	blogGroup.GET("/:id", blogHandler.QueryBlogByID)
 	blogGroup.GET("/likes/:id", blogHandler.QueryBlogLikes)
 	blogGroup.GET("/of/me", blogHandler.QueryMyBlog)
+	blogGroup.GET("/of/user", blogHandler.QueryBlogOfUser)
 	blogGroup.GET("/hot", blogHandler.QueryHotBlog)
 
 	uploadGroup := engine.Group("/upload")
@@ -54,6 +56,12 @@ func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir st
 	userGroup.POST("/logout", userHandler.Logout)
 	userGroup.GET("/me", userHandler.Me)
 	userGroup.GET("/info/:id", userHandler.Info)
+	userGroup.GET("/:id", userHandler.GetUserByID)
+
+	followGroup := engine.Group("/follow")
+	followGroup.PUT("/:id/:follow", followHandler.Follow) // follow=true 关注，false 取关
+	followGroup.GET("/or/not/:id", followHandler.IsFollowed)
+	followGroup.GET("/common/:id", followHandler.CommonFollow)
 
 	voucherOrderGroup := engine.Group("/voucher-order")
 	voucherOrderGroup.POST("/seckill/:id", voucherOrderHandler.SeckillVoucher)

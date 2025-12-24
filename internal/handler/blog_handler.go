@@ -184,3 +184,44 @@ func (h *BlogHandler) QueryBlogLikes(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, result.OkWithData(users))
 }
+
+// QueryBlogOfUser 获取指定用户的笔记列表（用于用户主页）
+func (h *BlogHandler) QueryBlogOfUser(ctx *gin.Context) {
+	userID, err := strconv.ParseInt(ctx.Query("id"), 10, 64)
+	if err != nil || userID <= 0 {
+		ctx.JSON(http.StatusBadRequest, result.Fail("invalid user id"))
+		return
+	}
+	page := utils.ParsePage(ctx.Query("current"), 1)
+
+	blogs, err := h.blogService.QueryByUser(ctx.Request.Context(), userID, page, utils.MAX_PAGE_SIZE)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+		return
+	}
+	// 填充作者信息一次
+	author, err := h.userService.FindByID(ctx.Request.Context(), userID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+		return
+	}
+
+	// 若当前有登录用户，标记是否点赞
+	loginUser, _ := middleware.GetLoginUser(ctx)
+
+	for i := range blogs {
+		if author != nil {
+			blogs[i].Name = author.NickName
+			blogs[i].Icon = author.Icon
+		}
+		if loginUser != nil {
+			isLike, err := h.blogService.IsLiked(ctx.Request.Context(), blogs[i].ID, loginUser.ID)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+				return
+			}
+			blogs[i].IsLike = &isLike
+		}
+	}
+	ctx.JSON(http.StatusOK, result.OkWithData(blogs))
+}

@@ -83,3 +83,22 @@ func (h *UserHandler) Info(ctx *gin.Context) {
 	// info.UpdateTime = nil
 	ctx.JSON(http.StatusOK, result.OkWithData(info))
 }
+
+// GetUserByID 通过 /user/:id 获取用户信息（用于用户主页）
+func (h *UserHandler) GetUserByID(ctx *gin.Context) {
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, result.Fail("invalid id"))
+		return
+	}
+	info, err := h.userService.FindByID(ctx.Request.Context(), id)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+		return
+	}
+	if info == nil {
+		ctx.JSON(http.StatusNotFound, result.Fail("user not found"))
+		return
+	}
+	ctx.JSON(http.StatusOK, result.OkWithData(info))
+}
