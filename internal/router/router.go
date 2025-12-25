@@ -58,6 +58,8 @@ func RegisterRoutes(engine *gin.Engine, services *service.Registry, uploadDir st
 	userGroup.GET("/me", userHandler.Me)
 	userGroup.GET("/info/:id", userHandler.Info)
 	userGroup.GET("/:id", userHandler.GetUserByID)
+	userGroup.POST("/sign", userHandler.Sign)
+	userGroup.GET("/sign/count", userHandler.SignCount)
 
 	followGroup := engine.Group("/follow")
 	followGroup.PUT("/:id/:follow", followHandler.Follow) // follow=true 关注，false 取关

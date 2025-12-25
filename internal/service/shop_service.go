@@ -312,13 +312,6 @@ func (s *ShopService) QueryByTypeWithLocation(ctx context.Context, typeID int64,
 		locs = locs[:end]
 	}
 	locs = locs[start:]
-	if s.log != nil {
-		pageIDs := make([]string, 0, len(locs))
-		for i, loc := range locs {
-			pageIDs = append(pageIDs, fmt.Sprintf("%d:%s:%.2f", i, loc.Name, loc.Dist))
-		}
-		s.log.Sugar().Infow("geo page slice", "page", page, "start", start, "end", end, "pageCount", len(locs), "ids", pageIDs)
-	}
 
 	// 取出 shopIds，按顺序回表查询并带回距离
 	ids := make([]int64, 0, len(locs))

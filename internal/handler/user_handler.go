@@ -6,6 +6,7 @@ import (
 	"hmdp-backend/internal/middleware"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -101,4 +102,33 @@ func (h *UserHandler) GetUserByID(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, result.OkWithData(info))
+}
+
+// Sign 用户签到
+func (h *UserHandler) Sign(ctx *gin.Context) {
+	loginUser, ok := middleware.GetLoginUser(ctx)
+	if !ok || loginUser == nil {
+		ctx.JSON(http.StatusUnauthorized, result.Fail("未登录"))
+		return
+	}
+	if err := h.userService.Sign(ctx.Request.Context(), loginUser.ID, time.Now()); err != nil {
+		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, result.Ok())
+}
+
+// SignCount 本月连续签到天数（从当日向前统计，遇到未签到即停止）
+func (h *UserHandler) SignCount(ctx *gin.Context) {
+	loginUser, ok := middleware.GetLoginUser(ctx)
+	if !ok || loginUser == nil {
+		ctx.JSON(http.StatusUnauthorized, result.Fail("未登录"))
+		return
+	}
+	count, err := h.userService.CountContinuousSign(ctx.Request.Context(), loginUser.ID, time.Now())
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, result.Fail(err.Error()))
+		return
+	}
+	ctx.JSON(http.StatusOK, result.OkWithData(count))
 }

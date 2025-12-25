@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hmdp-backend/internal/mapper"
 	"log"
 	"strconv"
@@ -118,4 +119,40 @@ func (s *UserService) FindByID(ctx context.Context, id int64) (*model.User, erro
 		return nil, err
 	}
 	return &user, nil
+}
+
+// Sign 处理用户签到，使用 Redis Bitmap 记录每日签到（offset=当天-1）
+// key 形如 user:sign:{userId}:{year}:{month}
+func (s *UserService) Sign(ctx context.Context, userID int64, now time.Time) error {
+	year, month, day := now.Date()
+	key := fmt.Sprintf("user:sign:%d:%d:%02d", userID, year, int(month))
+	offset := int64(day - 1)
+	return s.rdb.SetBit(ctx, key, offset, 1).Err()
+}
+
+// CountContinuousSign 统计本月连续签到天数，从当日向前累计，遇到未签到即停止。
+// 使用 Bitmap 回溯当月天数，最多循环 31 次
+func (s *UserService) CountContinuousSign(ctx context.Context, userID int64, now time.Time) (int, error) {
+	year, month, day := now.Date()
+	key := fmt.Sprintf("user:sign:%d:%d:%02d", userID, year, int(month))
+
+	// 使用 BITFIELD 一次取出当月 1..day 的签到位，再从最低位开始统计连续 1 的数量。
+	// Redis 位序：offset=0 在返回值的最高位，offset=day-1 在最低位，因此右移即可。
+	reply, err := s.rdb.BitField(ctx, key, "GET", fmt.Sprintf("u%d", day), "0").Result()
+	if err != nil {
+		return 0, err
+	}
+	if len(reply) == 0 {
+		return 0, nil
+	}
+	val := reply[0]
+	count := 0
+	for range day {
+		if val&1 == 0 {
+			break
+		}
+		count++
+		val >>= 1
+	}
+	return count, nil
 }
