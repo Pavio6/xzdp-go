@@ -168,10 +168,6 @@ func (s *ShopService) GetByIDWithBloom(ctx context.Context, id int64) (*model.Sh
 	if err != nil {
 		return nil, err
 	}
-	if shop != nil {
-		// 查询成功后，将 ID 补充进布隆，便于后续请求
-		_ = s.bloomAdd(ctx, bloomKey, id)
-	}
 	return shop, nil
 }
 
@@ -323,8 +319,11 @@ func bloomOffsets(id int64) []uint32 {
 	res := make([]uint32, 0, len(shopBloomSeeds))
 	// 遍历每个哈希种子 生成多组哈希
 	for _, seed := range shopBloomSeeds {
+		// 创建 FNV-1a 哈希算法实例
 		h := fnv.New32a()
+		// 将id转为字符串写入哈希计算
 		_, _ = h.Write([]byte(strconv.FormatInt(id, 10)))
+		// 返回哈希值加上种子后的偏移位置
 		sum := h.Sum32() + seed
 		res = append(res, sum%shopBloomSize)
 	}
@@ -397,7 +396,7 @@ func (s *ShopService) QueryByTypeWithLocation(ctx context.Context, typeID int64,
 		shopMap[shop.ID] = shop
 	}
 
-	// 按 GEO 结果的顺序输出，并附上距离（单位米）
+	// 按 GEO 结果的顺序输出，并附上距离
 	res := make([]model.Shop, 0, len(ids))
 	for _, loc := range locs {
 		id, _ := strconv.ParseInt(loc.Name, 10, 64)

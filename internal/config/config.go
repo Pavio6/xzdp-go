@@ -12,6 +12,8 @@ type Config struct {
 	Server  ServerConfig  `mapstructure:"server"`
 	MySQL   MySQLConfig   `mapstructure:"mysql"`
 	Redis   RedisConfig   `mapstructure:"redis"`
+	Kafka   KafkaConfig   `mapstructure:"kafka"`
+	SMTP    SMTPConfig    `mapstructure:"smtp"`
 	App     AppConfig     `mapstructure:"app"`
 	Logging LoggingConfig `mapstructure:"logging"`
 }
@@ -34,6 +36,24 @@ type RedisConfig struct {
 	Addr     string `mapstructure:"addr"`
 	Password string `mapstructure:"password"`
 	DB       int    `mapstructure:"db"`
+}
+
+// KafkaConfig configures Kafka producer/consumer settings.
+type KafkaConfig struct {
+	Brokers []string `mapstructure:"brokers"`
+	Topic   string   `mapstructure:"topic"`
+	RetryTopic string `mapstructure:"retryTopic"`
+	DLQTopic   string `mapstructure:"dlqTopic"`
+	GroupID string   `mapstructure:"groupId"`
+}
+
+// SMTPConfig configures email notifications.
+type SMTPConfig struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
+	User string `mapstructure:"user"`
+	Pass string `mapstructure:"pass"`
+	To   string `mapstructure:"to"`
 }
 
 // AppConfig carries miscellaneous application settings.

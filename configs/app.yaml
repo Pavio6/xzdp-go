@@ -9,6 +9,19 @@ redis:
   addr: "127.0.0.1:6379"
   password: ""
   db: 0
+kafka:
+  brokers:
+    - "127.0.0.1:29092"
+  topic: "seckill-orders"
+  retryTopic: "seckill-orders-retry"
+  dlqTopic: "seckill-orders-dlq"
+  groupId: "seckill-order-consumers"
+smtp:
+  host: "smtp.qq.com"
+  port: 465
+  user: "931980377@qq.com"
+  pass: "lteecxcugebybfjc"
+  to: "lufeijin9@gmail.com"
 app:
   imageUploadDir: "/opt/homebrew/var/www/hmdp/imgs"
 logging:

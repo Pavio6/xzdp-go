@@ -2,8 +2,11 @@ package service
 
 import (
 	"github.com/redis/go-redis/v9"
+	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"hmdp-backend/internal/utils"
 )
 
 // Registry 聚合全部业务 Service，方便注入 handler
@@ -18,8 +21,19 @@ type Registry struct {
 	Follow         *FollowService
 }
 
-// NewRegistry 使用共享 DB 与 Redis 构建所有服务
-func NewRegistry(db *gorm.DB, rdb *redis.Client, log *zap.Logger) *Registry {
+// NewRegistry 构造服务注册中心
+func NewRegistry(
+	db *gorm.DB,
+	rdb *redis.Client,
+	kafkaWriter *kafka.Writer,
+	kafkaRetryWriter *kafka.Writer,
+	kafkaDLQWriter *kafka.Writer,
+	kafkaReader *kafka.Reader,
+	kafkaRetryReader *kafka.Reader,
+	kafkaDLQReader *kafka.Reader,
+	smtpCfg utils.SMTPConfig,
+	log *zap.Logger,
+) *Registry {
 	if log == nil {
 		log = zap.NewNop()
 	}
@@ -32,7 +46,7 @@ func NewRegistry(db *gorm.DB, rdb *redis.Client, log *zap.Logger) *Registry {
 		Voucher:        NewVoucherService(db, seckillSvc, rdb),
 		SeckillVoucher: seckillSvc,
 		User:           NewUserService(db, rdb),
-		VoucherOrder:   NewVoucherOrderService(db, rdb),
+		VoucherOrder:   NewVoucherOrderService(db, rdb, kafkaWriter, kafkaRetryWriter, kafkaDLQWriter, kafkaReader, kafkaRetryReader, kafkaDLQReader, smtpCfg, log),
 		Follow:         followSvc,
 	}
 }

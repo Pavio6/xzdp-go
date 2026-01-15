@@ -34,5 +34,6 @@ func TestPreheatShopBloom(t *testing.T) {
 			t.Fatalf("bloom add id=%d: %v", id, err)
 		}
 	}
+
 	t.Log("preheated bloom filter with ids 1..14")
 }
