@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/allegro/bigcache/v3"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -20,23 +22,33 @@ import (
 const lockRetryDelay = 50 * time.Millisecond // 拿不到互斥锁时的短暂休眠时间，避免热点击穿
 const shopBloomSize = 1 << 20                // 约 1M 位布隆过滤器
 var shopBloomSeeds = []uint32{17, 29, 37}    // 简单多哈希种子
+const defaultLocalShopCacheTTL = 30 * time.Second
 
 // ShopService 处理商铺相关业务逻辑
 type ShopService struct {
-	db  *gorm.DB
-	rdb *redis.Client
-	log *zap.Logger
+	db         *gorm.DB
+	rdb        *redis.Client
+	log        *zap.Logger
+	localCache *bigcache.BigCache
 }
 
 // NewShopService 创建 ShopService 实例
 func NewShopService(db *gorm.DB, rdb *redis.Client, log *zap.Logger) *ShopService {
-	return &ShopService{db: db, rdb: rdb, log: log}
+	cache := initShopLocalCache(log)
+	return &ShopService{db: db, rdb: rdb, log: log, localCache: cache}
 }
 
 // GetByID 根据shopId获取shop信息 - 使用互斥锁解决缓存击穿问题
 func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error) {
 	key := utils.CACHE_SHOP_KEY + strconv.FormatInt(id, 10)
 	lockKey := utils.LOCK_SHOP_KEY + strconv.FormatInt(id, 10)
+
+	if shop, ok := s.getLocalShop(key); ok {
+		if s.log != nil {
+			s.log.Info("shop cache hit (local)", zap.Int64("shopId", id))
+		}
+		return shop, nil
+	}
 
 	for {
 		// 1.从 Redis 查询商铺缓存
@@ -47,6 +59,8 @@ func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error
 			if unmarshalErr := json.Unmarshal([]byte(cached), &shop); unmarshalErr != nil {
 				return nil, unmarshalErr
 			}
+			// 设置本地缓存
+			s.setLocalShop(key, []byte(cached))
 			return &shop, nil
 		}
 		// 如果err不是redis.Nil，说明是其他错误，直接返回
@@ -72,6 +86,7 @@ func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error
 			if unmarshalErr := json.Unmarshal([]byte(cached), &shop); unmarshalErr != nil {
 				return nil, unmarshalErr
 			}
+			s.setLocalShop(key, []byte(cached))
 			_ = s.unlock(ctx, lockKey)
 			return &shop, nil
 		}
@@ -190,6 +205,8 @@ func (s *ShopService) loadShopAndCache(ctx context.Context, id int64, key string
 	if err := s.rdb.Set(ctx, key, data, time.Duration(utils.CACHE_SHOP_TTL)*time.Minute).Err(); err != nil {
 		return nil, err
 	}
+	// 设置本地缓存
+	s.setLocalShop(key, data)
 	return &shop, nil
 }
 
@@ -250,6 +267,7 @@ func (s *ShopService) Update(ctx context.Context, shop *model.Shop) error {
 		if err := s.rdb.Del(ctx, key).Err(); err != nil {
 			return err
 		}
+		s.deleteLocalShop(key)
 		return nil
 	})
 }
@@ -328,6 +346,67 @@ func bloomOffsets(id int64) []uint32 {
 		res = append(res, sum%shopBloomSize)
 	}
 	return res
+}
+// initShopLocalCache 初始化本地缓存
+func initShopLocalCache(log *zap.Logger) *bigcache.BigCache {
+	// 设置本地缓存的默认 TTL，并使用清理窗口控制过期扫描频率
+	ttl := localShopCacheTTL()
+	config := bigcache.DefaultConfig(ttl)
+	if ttl > 0 {
+		// 清理窗口设为 TTL 的一半，降低过期键清理的抖动
+		config.CleanWindow = ttl / 2
+	}
+	cache, err := bigcache.New(context.Background(), config)
+	if err != nil && log != nil {
+		log.Warn("init shop local cache failed", zap.Error(err))
+		return nil
+	}
+	return cache
+}
+// localShopCacheTTL 获取本地缓存 TTL 支持通过环境变量配置
+func localShopCacheTTL() time.Duration {
+	if raw := os.Getenv("SHOP_LOCAL_CACHE_TTL"); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil {
+			return d
+		}
+	}
+	return defaultLocalShopCacheTTL
+}
+// getLocalShop 从本地缓存获取店铺信息
+func (s *ShopService) getLocalShop(key string) (*model.Shop, bool) {
+	if s.localCache == nil {
+		return nil, false
+	}
+	data, err := s.localCache.Get(key)
+	if err != nil {
+		return nil, false
+	}
+	var shop model.Shop
+	if unmarshalErr := json.Unmarshal(data, &shop); unmarshalErr != nil {
+		s.localCache.Delete(key)
+		return nil, false
+	}
+	return &shop, true
+}
+// setLocalShop 将店铺信息存入本地缓存
+func (s *ShopService) setLocalShop(key string, data []byte) {
+	if s.localCache == nil || len(data) == 0 {
+		return
+	}
+	_ = s.localCache.Set(key, data)
+	if s.log != nil {
+		s.log.Info("shop cache set (local)", zap.String("key", key))
+	}
+}
+// deleteLocalShop 从本地缓存删除店铺信息
+func (s *ShopService) deleteLocalShop(key string) {
+	if s.localCache == nil {
+		return
+	}
+	s.localCache.Delete(key)
+	if s.log != nil {
+		s.log.Info("shop cache delete (local)", zap.String("key", key))
+	}
 }
 
 // QueryByTypeWithLocation 根据类型 + 坐标查询店铺，按距离排序
