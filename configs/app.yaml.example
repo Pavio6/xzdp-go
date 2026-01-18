@@ -21,9 +21,9 @@ kafka:
 smtp:
   host: "smtp.qq.com"
   port: 465
-  user: "931980377@qq.com"
-  pass: "lteecxcugebybfjc"
-  to: "lufeijin9@gmail.com"
+  user: "your@qq.com"
+  pass: ""
+  to: "alert_receiver@gmail.com"
 app:
   imageUploadDir: "/opt/homebrew/var/www/hmdp/imgs"
   shopCache:

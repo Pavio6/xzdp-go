@@ -7,6 +7,10 @@
 **关闭nginx**
 `brew services stop nginx`
 
+### 配置文件
+1. 复制示例配置为本地配置：`cp configs/app.yaml.example configs/app.yaml`
+2. 在 `configs/app.yaml` 中填写本地敏感信息（如 SMTP 密码），该文件已加入 `.gitignore`
+
 
 
 1. 根据id查询商铺信息 -> 二级缓存（本地 BigCache L1 + Redis L2），分布式锁/逻辑过期 解决缓存击穿，使用 Bloom Filter 解决缓存穿透

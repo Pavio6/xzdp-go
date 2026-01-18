@@ -18,3 +18,6 @@ cover.out
 
 # Uploaded images / runtime data
 opt/homebrew/var/www/hmdp/imgs
+
+# Local config
+configs/app.yaml
