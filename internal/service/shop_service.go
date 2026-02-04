@@ -22,7 +22,7 @@ import (
 
 const lockRetryDelay = 50 * time.Millisecond // 拿不到互斥锁时的短暂休眠时间，避免热点击穿
 const shopBloomSize = 1 << 20                // 约 1M 位布隆过滤器
-var shopBloomSeeds = []uint32{17, 29, 37}    // 简单多哈希种子
+var shopBloomSeeds = []uint32{17, 29, 37}    // 多哈希种子（相当于多哈希函数）- 每个ID会设置3个bit
 const defaultLocalShopCacheTTL = 30 * time.Second
 const defaultShopCacheDeleteRetryCount = 3
 const defaultShopCacheDeleteRetryDelay = 20 * time.Millisecond
@@ -94,11 +94,13 @@ func NewShopService(
 	return svc
 }
 
-// GetByID 根据shopId获取shop信息 - 使用互斥锁解决缓存击穿问题
-func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error) {
+// GetByIDWithMutex 根据id查询热点商铺信息
+// 使用互斥锁解决热点Key缓存击穿问题
+func (s *ShopService) GetByIDWithMutex(ctx context.Context, id int64) (*model.Shop, error) {
 	key := utils.CACHE_SHOP_KEY + strconv.FormatInt(id, 10)
 	lockKey := utils.LOCK_SHOP_KEY + strconv.FormatInt(id, 10)
 
+	// 从本地缓存查询
 	if shop, ok := s.getLocalShop(key); ok {
 		if s.log != nil {
 			s.log.Info("shop cache hit (local)", zap.Int64("shopId", id))
@@ -107,7 +109,7 @@ func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error
 	}
 
 	for {
-		// 1.从 Redis 查询商铺缓存
+		// 1.从 Redis 查询商铺缓存 - 缓存命中
 		cached, err := s.rdb.Get(ctx, key).Result()
 		// err为空 说明查询到了缓存
 		if err == nil {
@@ -134,8 +136,11 @@ func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error
 			time.Sleep(lockRetryDelay)
 			continue
 		}
-		// DoubleCheck 拿到锁后再次查询缓存，因为在获取锁的时候 可能其他协程已经把缓存写入了
-		// 这样避免重复查询数据库和写缓存
+		// DoubleCheck 拿到锁后再次查询缓存：先查本地，再查 Redis，避免重复查询数据库和写缓存
+		if shop, ok := s.getLocalShop(key); ok {
+			_ = s.unlock(ctx, lockKey)
+			return shop, nil
+		}
 		cached, err = s.rdb.Get(ctx, key).Result()
 		if err == nil {
 			var shop model.Shop
@@ -158,7 +163,8 @@ func (s *ShopService) GetByID(ctx context.Context, id int64) (*model.Shop, error
 	}
 }
 
-// GetByIDWithLogicalExpire 根据shopId获取shop信息 - 使用逻辑过期时间解决热点 Key 缓存击穿
+// GetByIDWithLogicalExpire 根据id查询热点商铺信息
+// 使用逻辑过期时间解决热点Key缓存击穿
 
 // 逻辑过期前提是：Redis 里必须有旧值可以返回
 // 启动或定时预先将热点数据加载到 Redis，并设置逻辑过期时间
@@ -235,7 +241,7 @@ func (s *ShopService) GetByIDWithBloom(ctx context.Context, id int64) (*model.Sh
 		return nil, nil
 	}
 
-	shop, err := s.GetByID(ctx, id)
+	shop, err := s.GetByIDWithMutex(ctx, id)
 	if err != nil {
 		return nil, err
 	}

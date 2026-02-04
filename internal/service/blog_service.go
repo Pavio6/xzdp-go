@@ -103,6 +103,7 @@ func (s *BlogService) ToggleLike(ctx context.Context, blogID, userID int64) (boo
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return false, err
 	}
+	// 点赞流程
 	if errors.Is(err, redis.Nil) {
 		if err := s.db.WithContext(ctx).
 			Model(&model.Blog{}).
@@ -119,7 +120,7 @@ func (s *BlogService) ToggleLike(ctx context.Context, blogID, userID int64) (boo
 		return true, nil
 	}
 
-	// 已点赞，执行取消点赞
+	// 取消点赞
 	if err := s.db.WithContext(ctx).
 		Model(&model.Blog{}).
 		Where("id = ? AND liked > 0", blogID).
@@ -148,6 +149,7 @@ func (s *BlogService) IsLiked(ctx context.Context, blogID, userID int64) (bool, 
 // TopLikerIDs 返回最早点赞的前 N 个用户ID
 func (s *BlogService) TopLikerIDs(ctx context.Context, blogID int64, limit int64) ([]int64, error) {
 	key := fmt.Sprintf("%s%d", utils.BLOG_LIKED_KEY, blogID)
+	// ZRange：按分数从小到大返回指定区间的成员 
 	members, err := s.rdb.ZRange(ctx, key, 0, limit-1).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -168,10 +170,12 @@ func (s *BlogService) TopLikerIDs(ctx context.Context, blogID int64, limit int64
 // lastID 为上次查询的最小时间戳（初次可传 0），offset 处理同分数偏移
 func (s *BlogService) QueryFeed(ctx context.Context, userID int64, lastID int64, offset int64, limit int64) ([]model.Blog, int64, int64, error) {
 	key := fmt.Sprintf("%s%d", utils.FEED_KEY, userID)
+	// +inf 是Redis有序集合按分数查询时的正无穷
 	max := "+inf"
 	if lastID > 0 {
 		max = fmt.Sprintf("%d", lastID)
 	}
+	// 按分数降序取区间并且返回分数
 	zs, err := s.rdb.ZRevRangeByScoreWithScores(ctx, key, &redis.ZRangeBy{
 		Min:    "-inf",
 		Max:    max,
@@ -205,6 +209,7 @@ func (s *BlogService) QueryFeed(ctx context.Context, userID int64, lastID int64,
 	}
 
 	// 按查询顺序返回博客列表
+	// SELECT ... WHERE id IN (...)  不保证返回顺序，可能乱序
 	var blogs []model.Blog
 	if err := s.db.WithContext(ctx).
 		Where("id IN ?", ids).
@@ -216,6 +221,7 @@ func (s *BlogService) QueryFeed(ctx context.Context, userID int64, lastID int64,
 	for i, id := range ids {
 		idIndex[id] = i
 	}
+	// 按idIndex映射的顺序，把blogs排好
 	sort.Slice(blogs, func(i, j int) bool {
 		return idIndex[blogs[i].ID] < idIndex[blogs[j].ID]
 	})
