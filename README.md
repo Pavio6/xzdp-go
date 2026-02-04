@@ -1,4 +1,4 @@
-# HMDP Backend (Go)
+# XZDP Backend (Go)
 
 ![Go](https://img.shields.io/badge/Go-1.21%2B-00ADD8?logo=go)
 ![Build](https://img.shields.io/badge/build-passing-brightgreen)
@@ -42,7 +42,7 @@ scripts/             # 脚本与压测工具
 ## Getting Started
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.24+
 - MySQL
 - Redis
 - Kafka
