@@ -16,19 +16,7 @@
 - 🧵 关注流：Redis ZSet 推送收件箱 + 滚动分页
 - 🔁 可靠性：重试队列 + DLQ + 补偿兜底
 
-## Architecture & Tech Stack
-
-### Architecture (Mermaid)
-```mermaid
-flowchart LR
-  Client -->|HTTP| API[Go + Gin]
-  API --> Redis[(Redis)]
-  API --> MySQL[(MySQL)]
-  API --> Kafka[(Kafka)]
-  Kafka --> Worker[Order Consumer]
-  Worker --> MySQL
-  API --> LocalCache[BigCache]
-```
+## Tech Stack
 
 ### Tech Stack
 | Layer | Tech |
