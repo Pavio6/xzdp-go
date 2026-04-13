@@ -202,6 +202,7 @@ func (s *BlogService) QueryFeed(ctx context.Context, userID int64, lastID int64,
 	lastScore := int64(zs[len(zs)-1].Score)
 	nextLast = lastScore
 	nextOffset = 0
+	// nextOffset 最少为1
 	for i := len(zs) - 1; i >= 0; i-- {
 		if int64(zs[i].Score) == lastScore {
 			nextOffset++

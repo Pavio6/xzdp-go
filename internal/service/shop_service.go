@@ -301,6 +301,7 @@ func (s *ShopService) saveShopWithLogicalExpire(key string, shop *model.Shop, tt
 // tryLock 尝试获取锁
 func (s *ShopService) tryLock(ctx context.Context, key string) (bool, error) {
 	// 利用 Redis SETNX 实现简单互斥锁，并设置 TTL 防止死锁
+	// SETNX 只有当key不存在时，才设置值
 	return s.rdb.SetNX(ctx, key, "1", time.Duration(utils.LOCK_SHOP_TTL)*time.Second).Result()
 }
 

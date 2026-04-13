@@ -218,7 +218,7 @@ const (
 	consumeError
 )
 
-// consumeLoop 通用消费循环：负责拉取消息、反序列化、埋点与提交 offset 具体业务由 handler(hui diao) 处理
+// consumeLoop 通用消费循环：负责拉取消息、反序列化、埋点与提交 offset 具体业务由 handler 处理
 func (s *VoucherOrderService) consumeLoop(
 	ctx context.Context,
 	reader *kafka.Reader,
@@ -453,7 +453,7 @@ func (s *VoucherOrderService) publishKafkaMessage(ctx context.Context, writer *k
 	}
 	message := kafka.Message{
 		// 使用 voucherId 作为 key，保证同券消息落到同一分区
-		Key:   []byte(strconv.FormatInt(payload.VoucherID, 10)),
+		Key:   []byte(strconv.FormatInt(payload.VoucherID, 10)), // 把一个int64整数转为十进制字符串
 		Value: data,
 	}
 	topic := writer.Topic
@@ -487,6 +487,8 @@ func (s *VoucherOrderService) createOrderTx(ctx context.Context, payload orderMe
 	}
 
 	nowTime := time.Now()
+	// 开启事务
+	// gorm会自动处理事务的提交和回滚，如果函数返回 error 则回滚，否则提交
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		order := &model.VoucherOrder{
 			ID:         payload.OrderID,
@@ -555,7 +557,7 @@ func isRetryableErr(err error) bool {
 func (s *VoucherOrderService) compensateRedis(ctx context.Context, payload orderMessage) {
 	stockKey := fmt.Sprintf(stockKeyFmt, payload.VoucherID)
 	orderSetKey := fmt.Sprintf(orderSetFmt, payload.VoucherID)
-	// 管道补偿操作
+	// 管道补偿操作(批量发送命令，减少RTT)
 	_, _ = s.rdb.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.Incr(ctx, stockKey)
 		pipe.SRem(ctx, orderSetKey, payload.UserID)
@@ -570,9 +572,6 @@ func retryBackoff(retryCount int) time.Duration {
 	}
 	// 1<<uint(retryCount-1)是位移：2^(retryCount-1)
 	backoff := time.Second * time.Duration(1<<uint(retryCount-1))
-	if backoff > 30*time.Second {
-		return 30 * time.Second
-	}
 	return backoff
 }
 
@@ -593,6 +592,7 @@ func (s *VoucherOrderService) startKafkaProduceSpan(ctx context.Context, topic s
 	}
 	tracer := otel.Tracer("hmdp-backend")
 	return tracer.Start(ctx, "kafka.produce",
+		// 给这个span标记类型为 Producer
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
 			attribute.String("messaging.system", "kafka"),

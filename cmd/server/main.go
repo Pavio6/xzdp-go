@@ -63,6 +63,7 @@ func main() {
 		ServiceName: serviceName,
 		Environment: environment,
 	}
+	// 初始化 OTel
 	tracingShutdown, err := observability.SetupTracing(context.Background(), tracingCfg, resourceCfg)
 	if err != nil {
 		log.Fatal("tracing init failed", zap.Error(err))
@@ -155,6 +156,7 @@ func main() {
 	}
 	var seckillMetrics *observability.SeckillMetrics
 	var metricsRegistry *prometheus.Registry
+	// 注册Prometheus指标
 	if cfg.Observability.Metrics.Enabled {
 		metricsRegistry = observability.NewMetricsRegistry()
 		seckillMetrics = observability.NewSeckillMetrics(metricsRegistry, serviceName)

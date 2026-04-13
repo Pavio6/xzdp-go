@@ -15,10 +15,10 @@ import (
 )
 
 type TracingConfig struct {
-	Enabled          bool
-	OTLPGrpcEndpoint string
-	Insecure         bool
-	SampleRate       float64
+	Enabled          bool    // 是否启用链路追踪
+	OTLPGrpcEndpoint string  // OTLP gRPC 导出端点地址
+	Insecure         bool    // 是否使用非 TLS 方式连接 OTLP 端点
+	SampleRate       float64 // 追踪采样率，取值范围通常为 0 到 1
 }
 
 type ResourceConfig struct {
@@ -39,6 +39,7 @@ func SetupTracing(ctx context.Context, tracing TracingConfig, resourceCfg Resour
 		opts = append(opts, otlptracegrpc.WithInsecure())
 	}
 	// 创建 OTLP 追踪导出器
+	// 将trace数据通过gRPC发送出去
 	exporter, err := otlptracegrpc.New(ctx, opts...)
 	if err != nil {
 		return nil, err
@@ -49,6 +50,7 @@ func SetupTracing(ctx context.Context, tracing TracingConfig, resourceCfg Resour
 		sampleRate = 1
 	}
 	// 创建资源信息
+	// 给trace数据添加一些公共属性，比如服务名称、环境等
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(resourceCfg.ServiceName),
@@ -59,6 +61,7 @@ func SetupTracing(ctx context.Context, tracing TracingConfig, resourceCfg Resour
 		return nil, err
 	}
 	// 创建 TracerProvider
+	// span 不会每生成一个就立刻发，而是先批量缓存，再批量导出
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(sampleRate))),

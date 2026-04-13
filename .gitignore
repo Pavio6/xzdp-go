@@ -1,7 +1,7 @@
 # IDE
 .idea/
 *.iml
-
+.vscode/
 # Build artifacts and binaries
 bin/
 *.out
@@ -21,3 +21,8 @@ opt/homebrew/var/www/hmdp/imgs
 
 # Local config
 configs/app.yaml
+
+resume-zh_CN.pdf
+.gitignore
+
+observable_learning/

@@ -16,6 +16,8 @@ type SMTPConfig struct {
 }
 
 // SendEmail 使用 SMTP 发送纯文本电子邮件
+// 发送流程: 检查配置 -> 建立stmp服务器的tls连接 -> 登录认证 -> 设置发件人与收件人 -> 写入邮件内容 -> 结束连接
+// STMP是发邮件用的协议，TLS是一种加密协议，SMTP可以在TLS上运行以确保安全传输
 func SendEmail(cfg SMTPConfig, subject, body string) error {
 	if cfg.Host == "" || cfg.Port == 0 || cfg.User == "" || cfg.Pass == "" || cfg.To == "" {
 		return fmt.Errorf("smtp config is incomplete")
