@@ -25,8 +25,8 @@ import (
 )
 
 const (
-	stockKeyFmt  = "seckill:stock:vid:%d"
-	orderSetFmt  = "order:vid:%d"
+	stockKeyFmt = "seckill:stock:vid:%d"
+	orderSetFmt = "order:vid:%d"
 )
 
 var errRetryEnqueued = errors.New("retry enqueued")
@@ -96,6 +96,7 @@ func NewVoucherOrderService(
 	}
 	return svc
 }
+
 // warmupScripts 预加载 Lua 脚本到 Redis
 func (s *VoucherOrderService) warmupScripts(ctx context.Context) {
 	if s.rdb == nil || s.seckillLua == nil {
@@ -177,9 +178,10 @@ func (s *VoucherOrderService) Seckill(ctx context.Context, voucherID, userID int
 			CreatedAt: time.Now().Unix(),
 		}
 		if err := s.publishOrder(ctx, msg); err != nil {
-			s.log.Error("publish kafka failed, queued for retry", zap.Error(err), zap.Int64("orderId", orderID))
-			s.metrics.ObserveSeckill("accepted", "publish_failed", time.Since(start))
-			return orderID, nil
+			s.compensateRedis(ctx, msg)
+			s.log.Error("publish kafka failed after retries, redis compensated", zap.Error(err), zap.Int64("orderId", orderID))
+			s.metrics.ObserveSeckill("rejected", "publish_failed", time.Since(start))
+			return 0, errors.New("系统繁忙，请稍后重试")
 		}
 		s.metrics.ObserveSeckill("accepted", "ok", time.Since(start))
 		return orderID, nil
@@ -378,6 +380,7 @@ func (s *VoucherOrderService) handleConsume(ctx context.Context, payload orderMe
 	)
 	return nil
 }
+
 // retryPhaseLabel 返回重试阶段标签
 func retryPhaseLabel(retryCount int) string {
 	switch retryCount {
@@ -445,6 +448,7 @@ func (s *VoucherOrderService) publishRetry(ctx context.Context, payload orderMes
 func (s *VoucherOrderService) publishDLQ(ctx context.Context, payload orderMessage) error {
 	return s.publishKafkaMessage(ctx, s.dlqWriter, payload, "publish dlq failed")
 }
+
 // publishKafkaMessage 写入消息到kafka
 func (s *VoucherOrderService) publishKafkaMessage(ctx context.Context, writer *kafka.Writer, payload orderMessage, errorMsg string) error {
 	data, err := json.Marshal(payload)
@@ -519,7 +523,7 @@ func (s *VoucherOrderService) createOrderTx(ctx context.Context, payload orderMe
 			return errDBStockNotEnough
 		}
 		return nil
-	}); err != nil { 
+	}); err != nil {
 		return err
 	}
 	return nil
@@ -553,6 +557,7 @@ func isRetryableErr(err error) bool {
 	}
 	return true
 }
+
 // compensateRedis 补偿 Redis 库存和用户下单资格
 func (s *VoucherOrderService) compensateRedis(ctx context.Context, payload orderMessage) {
 	stockKey := fmt.Sprintf(stockKeyFmt, payload.VoucherID)
@@ -585,6 +590,7 @@ func isDuplicateKey(err error) bool {
 	}
 	return false
 }
+
 // startKafkaProduceSpan 为 Kafka 生产操作创建 OpenTelemetry Span
 func (s *VoucherOrderService) startKafkaProduceSpan(ctx context.Context, topic string) (context.Context, trace.Span) {
 	if topic == "" {
@@ -600,6 +606,7 @@ func (s *VoucherOrderService) startKafkaProduceSpan(ctx context.Context, topic s
 		),
 	)
 }
+
 // startKafkaConsumeSpan 为 Kafka 消费操作创建 OpenTelemetry Span
 func (s *VoucherOrderService) startKafkaConsumeSpan(ctx context.Context, topic string) (context.Context, trace.Span) {
 	if topic == "" {
